@@ -516,6 +516,19 @@ main {
   color: var(--mute);
 }
 
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+.active-run-spinner {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--mute);
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
 /* ─── Live Overlay Console Log (when active stream) ─── */
 .live-stream-logger {
   position: fixed;

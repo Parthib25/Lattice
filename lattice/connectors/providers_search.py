@@ -18,6 +18,9 @@ class GitHubSearchConnector(SearchConnector):
         }
         if self.token:
             headers["Authorization"] = f"Bearer {self.token}"
+            logger.info(f"GitHubSearchConnector initialized with token starting with {self.token[:4]}...")
+        else:
+            logger.warning("GitHubSearchConnector initialized WITHOUT a token!")
 
         # Setup request path matching syntax
         # repo_path should be specified in org/repo format

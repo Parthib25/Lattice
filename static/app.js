@@ -286,6 +286,7 @@ document.addEventListener('DOMContentLoaded', () => {
     chatMessagesContainer.style.display = 'none';
     chatMessagesContainer.innerHTML = '';
     featureRequest.value = '';
+    featureRequest.style.height = '';
     
     // Reset active active state highlights
     document.querySelectorAll('.chat-thread-item').forEach(item => {
@@ -358,43 +359,26 @@ document.addEventListener('DOMContentLoaded', () => {
         </div>
       ` : '';
 
+      let docxChipHtml = '';
+      if (!isUser && m.content && m.content.toLowerCase().includes("what can be implemented")) {
+        docxChipHtml = `
+          <button class="download-docx-chip btn-ghost" style="position: absolute; top: 0.5rem; right: 0.5rem; font-size: 11px; padding: 4px 8px; border: 1px solid var(--hairline);" onclick="window.downloadMD(this, '${currentSessionId}')">
+            Download MD
+          </button>
+        `;
+      }
+
       return `
-        <div class="message-bubble ${bubbleClass}">
+        <div class="message-bubble ${bubbleClass}" style="position: relative;">
           <div class="message-role-tag">${roleTag}</div>
+          ${docxChipHtml}
           <div class="message-content">${contentHtml}</div>
           ${logsDrawerHtml}
         </div>
       `;
     }).join('');
 
-    // Append Rerun Row at the bottom
-    messagesHtml += `
-      <div style="display: flex; justify-content: flex-end; margin-top: 1.5rem; border-top: 1px dashed var(--hairline); padding-top: 1.5rem; width: 100%;">
-        <button class="btn-ghost" id="rerun-thread-btn" style="border-color: var(--warning); color: var(--warning); font-weight: 700; height: 36px; padding: 0 16px;">
-          ↻ Rerun Feasibility Check
-        </button>
-      </div>
-    `;
-
     chatMessagesContainer.innerHTML = messagesHtml;
-
-    // Wire up rerun click handler
-    const rerunBtn = document.getElementById('rerun-thread-btn');
-    if (rerunBtn) {
-      rerunBtn.addEventListener('click', async () => {
-        // Extract the prompt from the last user message
-        const lastUserMsg = messages.slice().reverse().find(m => m.role === 'user');
-        const promptText = lastUserMsg ? lastUserMsg.content : '';
-        
-        const repoId = repoSelect.value;
-        const provider = providerSelect.value;
-        const model = modelSelect.value || null;
-
-        if (promptText && repoId) {
-          await runFeasibilityCheck(repoId, provider, model, promptText);
-        }
-      });
-    }
     
     // Auto-scroll content
     const reportPane = document.getElementById('report-view');
@@ -404,10 +388,46 @@ document.addEventListener('DOMContentLoaded', () => {
   // ─── Form Submission & Event Stream Handling ────────────────────────────────
   async function runFeasibilityCheck(repoId, provider, model, promptText) {
     submitBtn.disabled = true;
-    submitBtn.textContent = 'Running…';
-    liveStreamLogger.style.display = 'flex';
-    consoleStatus.textContent = 'Running';
-    consoleLines.innerHTML = '> Connecting to streaming engine…\n';
+    submitBtn.innerHTML = '...';
+
+    // Hide empty placeholder if visible
+    placeholderView.style.display = 'none';
+    chatMessagesContainer.style.display = 'flex';
+
+    // 1. Instantly append User Prompt bubble
+    const userPromptHtml = `
+      <div class="message-bubble user">
+        <div class="message-role-tag">[+] USER PROMPT</div>
+        <div class="message-content"><p>${promptText}</p></div>
+      </div>
+    `;
+    
+    // Create assistant running bubble placeholder
+    const assistantBubbleHtml = `
+      <div class="message-bubble assistant" id="active-run-bubble">
+        <div class="message-role-tag">[x] EVALUATION REPORT (RUNNING...)</div>
+        <div class="message-content">
+          <div style="display: flex; align-items: center; gap: 0.5rem; color: var(--mute); font-size: 13px; margin-bottom: 0.75rem;">
+            <span class="active-run-spinner"></span>
+            <span>Agent analysis active...</span>
+          </div>
+          <div id="active-run-steps" style="font-family: var(--font-mono); font-size: 12px; background: var(--surface-soft); border: 1px solid var(--hairline); border-radius: var(--radius-sm); padding: 0.75rem; max-height: 180px; overflow-y: auto; color: var(--body); white-space: pre-wrap; line-height: 1.5;">
+          </div>
+        </div>
+      </div>
+    `;
+
+    // Remove any leftover active running bubble and append new bubbles
+    const oldActiveBubble = document.getElementById('active-run-bubble');
+    if (oldActiveBubble) oldActiveBubble.remove();
+    
+    chatMessagesContainer.insertAdjacentHTML('beforeend', userPromptHtml + assistantBubbleHtml);
+
+    // Auto-scroll chat area
+    const reportPane = document.getElementById('report-view');
+    reportPane.scrollTop = reportPane.scrollHeight;
+
+    const runStepsContainer = document.getElementById('active-run-steps');
 
     try {
       const headers = getAuthHeaders({ 'Content-Type': 'application/json' });
@@ -436,27 +456,27 @@ document.addEventListener('DOMContentLoaded', () => {
       // Immediately reload history to show/active the session thread
       await loadChatHistory();
       
-      // Phase 2: Subscribe to real-time events (pass token as query param - EventSource can't set headers)
+      // Phase 2: Subscribe to real-time events
       const tokenParam = idToken ? `?token=${encodeURIComponent(idToken)}` : '';
       const eventSource = new EventSource(`/api/feasibility/stream/${run_id}${tokenParam}`);
       
       eventSource.onopen = () => {
-        consoleLines.innerHTML += '> SSE Stream connection opened.\n';
+        runStepsContainer.innerHTML += '> Connecting to agent graph…\n';
       };
 
       eventSource.onerror = (err) => {
         if (eventSource.readyState === EventSource.CLOSED) {
           eventSource.close();
-          consoleLines.innerHTML += '> Connection lost or closed by server.\n';
-          consoleStatus.textContent = 'Error';
+          runStepsContainer.innerHTML += '\n> Connection closed by server.';
           submitBtn.disabled = false;
-          submitBtn.textContent = 'Run Feasibility Check';
-          setTimeout(() => {
-            liveStreamLogger.style.display = 'none';
-          }, 3000);
+          submitBtn.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>';
+          
+          // Re-sync with database to load final state
+          setTimeout(() => selectChatSession(currentSessionId), 500);
         } else {
-          consoleLines.innerHTML += '> Reconnecting to event source…\n';
+          runStepsContainer.innerHTML += '> Reconnecting to agent stream…\n';
         }
+        runStepsContainer.scrollTop = runStepsContainer.scrollHeight;
       };
 
       eventSource.onmessage = async (event) => {
@@ -464,39 +484,50 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (payload.event === 'done') {
           eventSource.close();
-          consoleLines.innerHTML += '> Agent feasibility run complete.\n';
-          consoleStatus.textContent = 'Idle';
+          runStepsContainer.innerHTML += '\n> Feasibility evaluation completed.';
           
-          setTimeout(() => {
-            liveStreamLogger.style.display = 'none';
-          }, 3000);
-
           // Restore normal states
           submitBtn.disabled = false;
-          submitBtn.textContent = 'Run Feasibility Check';
+          submitBtn.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>';
           featureRequest.value = '';
+          featureRequest.style.height = '';
 
-          // Reload session details and display thread history
+          // Reload session details to display finalized markdown content from DB
           await selectChatSession(currentSessionId);
         } else if (payload.event === 'error') {
-          consoleLines.innerHTML += `> Error: ${payload.message}\n`;
+          runStepsContainer.innerHTML += `\n⚠️ Error: ${payload.message}\n`;
         } else if (payload.event === 'node_start') {
-          consoleLines.innerHTML += `>[${payload.node.toUpperCase()} START] ${payload.message || ''}\n`;
+          const stepName = payload.node.toUpperCase();
+          runStepsContainer.innerHTML += `>[${stepName} START] ${payload.message || ''}\n`;
         } else if (payload.event === 'node_complete') {
-          consoleLines.innerHTML += `>[${payload.node.toUpperCase()} COMPLETE] ${payload.message || ''}\n`;
+          const stepName = payload.node.toUpperCase();
+          runStepsContainer.innerHTML += `>[${stepName} COMPLETE] ${payload.message || ''}\n`;
         } else {
-          consoleLines.innerHTML += `> ${payload.message || JSON.stringify(payload)}\n`;
+          runStepsContainer.innerHTML += `> ${payload.message || JSON.stringify(payload)}\n`;
         }
-        consoleLines.scrollTop = consoleLines.scrollHeight;
+        runStepsContainer.scrollTop = runStepsContainer.scrollHeight;
+        reportPane.scrollTop = reportPane.scrollHeight;
       };
 
     } catch (err) {
-      consoleLines.innerHTML += `> Error: ${err.message}\n`;
-      consoleStatus.textContent = 'Error';
+      if (runStepsContainer) {
+        runStepsContainer.innerHTML += `\n⚠️ Error: ${err.message}\n`;
+        runStepsContainer.scrollTop = runStepsContainer.scrollHeight;
+      }
       submitBtn.disabled = false;
-      submitBtn.textContent = 'Run Feasibility Check';
+      submitBtn.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>';
     }
   }
+
+  // Handle Enter key for submission
+  featureRequest.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      if (featureRequest.value.trim() !== '') {
+        evaluationForm.dispatchEvent(new Event('submit'));
+      }
+    }
+  });
 
   evaluationForm.addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -631,5 +662,42 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     });
   }
+
+  // ─── Markdown Download Implementation ──────────────────────────────────────
+  window.downloadMD = async function(btn, sessionId) {
+    try {
+      const originalText = btn.textContent;
+      btn.disabled = true;
+      btn.textContent = 'Downloading...';
+      
+      const response = await fetch(`/api/chats/${sessionId}`, {
+        headers: getAuthHeaders()
+      });
+      if (!response.ok) throw new Error('Failed to fetch chat data');
+      
+      const data = await response.json();
+      const messages = data.messages || [];
+      const reportMsg = messages.slice().reverse().find(m => m.role !== 'user' && m.content && m.content.toLowerCase().includes("what can be implemented"));
+      
+      if (!reportMsg) throw new Error('Report not found in chat history');
+      
+      const blob = new Blob([reportMsg.content], { type: 'text/markdown' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `feasibility_report_${sessionId.substring(0, 8)}.md`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      
+      btn.textContent = originalText;
+      btn.disabled = false;
+    } catch (err) {
+      alert('Failed to download MD: ' + err.message);
+      btn.textContent = 'Download MD';
+      btn.disabled = false;
+    }
+  };
 });
 

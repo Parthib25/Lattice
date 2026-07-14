@@ -26,7 +26,8 @@ dependencies = [
     "langchain-anthropic>=0.1.0",
     "langchain-google-genai>=1.0.0",
     "langchain-community>=0.0.30",
-    "langchain-huggingface>=0.0.3"
+    "langchain-huggingface>=0.0.3",
+    "markdown>=3.6"
 ]
 
 [tool.hatch.build.targets.wheel]

@@ -19,6 +19,9 @@ from pydantic import BaseModel, EmailStr
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from fastapi import UploadFile, File
+from fastapi.responses import StreamingResponse
+import io
+import re
 
 from lattice.database.connection import DatabaseConnectionManager
 from lattice.database.models import User, Repository, ChatSession, ChatMessage

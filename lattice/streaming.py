@@ -66,6 +66,8 @@ async def run_agent_task(
     model: Optional[str],
     custom_domain: Optional[str],
     db_session_factory, # callable returning get_session context
+    repo_name: str = "repository",
+    vcs_url: str = "",
 ) -> None:
     from lattice.connectors import get_llm_connector, get_search_connector
     from lattice.agent import LatticeAgent
@@ -92,6 +94,18 @@ async def run_agent_task(
     final_report = ""
     error_occurred = False
     error_msg = ""
+    
+    # Fetch chat history
+    chat_history = []
+    try:
+        async with db_session_factory() as session:
+            existing_messages = await ChatRepository.get_messages(session, session_id)
+            for m in existing_messages:
+                chat_history.append({"role": m.role, "content": m.content})
+    except Exception as e:
+        logger.error(f"Failed to fetch chat history: {e}")
+        
+    chat_history.append({"role": "user", "content": feature_request})
 
     try:
         prov_upper = provider.upper()
@@ -108,12 +122,25 @@ async def run_agent_task(
                 token=sg_token,
                 endpoint_url=sg_url,
             )
+        elif vcs_url.startswith("https://github.com/"):
+            gh_token = os.getenv("GITHUB_TOKEN", "")
+            searcher = get_search_connector(
+                "github",
+                base_path=WORKSPACE_DIR,
+                token=gh_token,
+            )
         else:
             searcher = get_search_connector("local", base_path=WORKSPACE_DIR)
 
         agent = LatticeAgent(llm, searcher, log_callback=log_callback)
-        result = await agent.run(feature_request, rules=rules)
-        final_report = result.get("final_report", "")
+        result = await agent.run(feature_request, rules=rules, chat_history=chat_history, repo_name=repo_name, vcs_url=vcs_url)
+        
+        is_clear = result.get("is_clear", True)
+        if not is_clear:
+            final_report = result.get("clarifying_question", "Could you provide more details?")
+        else:
+            final_report = result.get("final_report", "")
+            
         matching_rules_list = result.get("matching_rules", [])
 
     except Exception as exc:
@@ -273,7 +300,9 @@ async def trigger_stream(
             provider=data.provider,
             model=data.model,
             custom_domain=repo.custom_domain,
-            db_session_factory=db_session_factory
+            db_session_factory=db_session_factory,
+            repo_name=repo.name,
+            vcs_url=repo.vcs_url,
         )
     )
 
