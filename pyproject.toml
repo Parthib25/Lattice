@@ -1,0 +1,37 @@
+[project]
+name = "lattice"
+version = "0.1.0"
+description = "Lattice Feature Feasibility Agent and Server"
+authors = [{name = "DeepMind Team", email = "support@deepmind.com"}]
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "fastapi>=0.110.0",
+    "uvicorn>=0.28.0",
+    "typer>=0.9.0",
+    "sqlalchemy>=2.0.28",
+    "asyncpg>=0.29.0",
+    "aiomysql>=0.2.0",
+    "aiosqlite>=0.20.0",
+    "redis>=5.0.3",
+    "pydantic>=2.6.4",
+    "pyjwt>=2.8.0",
+    "httpx>=0.27.0",
+    "langgraph>=0.0.26",
+    "sse-starlette>=2.1.0",
+    "python-multipart>=0.0.9",
+    "email-validator>=2.0.0",
+    "python-dotenv>=1.0.0",
+    "langchain-openai>=0.1.0",
+    "langchain-anthropic>=0.1.0",
+    "langchain-google-genai>=1.0.0",
+    "langchain-community>=0.0.30",
+    "langchain-huggingface>=0.0.3"
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["lattice"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"

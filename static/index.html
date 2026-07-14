@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Lattice — Feature Feasibility</title>
+  <meta name="description" content="Lattice evaluates feature requests against your codebase architecture and security guardrails.">
+  <link rel="stylesheet" href="/static/index.css">
+  <!-- Three.js -->
+  <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
+  <!-- Markdown-it CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/markdown-it@14.1.0/dist/markdown-it.min.js"
+          crossorigin="anonymous"></script>
+  <!-- Google Identity Services -->
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+</head>
+<body>
+
+  <!-- Background Canvas -->
+  <canvas id="lattice-canvas"></canvas>
+
+  <!-- Login Gate Overlay -->
+  <div id="login-overlay">
+    <p style="font-size: 11px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--mute);">Feature Intelligence</p>
+    <h1 class="login-wordmark">Lattice</h1>
+    <p class="login-tagline">
+      Evaluate feature requests against your codebase architecture and security guardrails.
+    </p>
+    <div class="login-divider"></div>
+    <div id="google-signin-btn-overlay"></div>
+  </div>
+
+  <!-- Main Navigation Header -->
+  <header>
+    <div class="nav-wordmark">Lattice</div>
+    <div class="nav-right">
+      <div id="role-selector-wrapper" style="display: none; align-items: center; gap: 0.25rem; font-size: 13px; color: var(--body);">
+        <span>[Role:</span>
+        <select id="role-select" style="background: transparent; border: none; color: var(--ink); font-family: var(--font-mono); font-size: 13px; font-weight: 700; outline: none; cursor: pointer; padding-right: 0.5rem; text-transform: uppercase;">
+          <option value="USER">User</option>
+          <option value="ADMIN">Admin</option>
+        </select>
+        <span>]</span>
+      </div>
+      <div id="user-chip" class="nav-user-chip" style="display: none;">
+        <span id="user-display"></span>
+      </div>
+      <button class="btn-ghost" id="logout-btn" style="display: none;">Sign out</button>
+    </div>
+  </header>
+
+
+  <!-- ChatGPT-Style App Shell -->
+  <div class="app-container">
+
+    <!-- Left Sidebar: Chat History + Settings -->
+    <aside>
+      <!-- New Thread Control -->
+      <div class="sidebar-header">
+        <button class="btn-primary" id="new-chat-btn" style="width: 100%;">
+          [+] New Evaluation
+        </button>
+      </div>
+
+      <div class="sidebar-scroll">
+        <!-- Chat History Threads -->
+        <div class="form-group">
+          <span class="empty-eyebrow">Recent Runs</span>
+          <div id="chat-history-list" class="chat-history-list">
+            <!-- Populated dynamically via JS -->
+            <div style="font-size: 12px; color: var(--mute); text-align: center; padding: 1rem;">No history yet</div>
+          </div>
+        </div>
+
+        <div style="border-top: 1px solid var(--hairline); margin: 0.5rem 0;"></div>
+
+        <!-- Evaluation Form Configuration -->
+        <div class="form-group">
+          <span class="empty-eyebrow">Parameters</span>
+        </div>
+
+        <form id="evaluation-form" style="display: flex; flex-direction: column; gap: 1rem;">
+          <div class="form-group">
+            <label for="repo-select">Target Repository</label>
+            <select id="repo-select" required>
+              <option value="">Loading repositories…</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label for="provider-select">LLM Provider</label>
+            <select id="provider-select">
+              <option value="openai">OpenAI</option>
+              <option value="gemini">Gemini</option>
+              <option value="anthropic">Anthropic</option>
+              <option value="huggingface">Hugging Face</option>
+              <option value="ollama">Ollama</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label for="model-select">Model</label>
+            <select id="model-select">
+              <option value="">Default</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label for="feature-request">Feature Request</label>
+            <textarea
+              id="feature-request"
+              placeholder="Describe the feature you want to evaluate…"
+              required
+            ></textarea>
+          </div>
+
+          <button type="submit" class="btn-primary" id="submit-btn">
+            Run Feasibility Check
+          </button>
+        </form>
+
+        <div style="border-top: 1px solid var(--hairline); margin: 0.5rem 0;"></div>
+
+        <!-- Guardrail Rules Template Management -->
+        <div class="form-group">
+          <span class="empty-eyebrow">System Rules</span>
+        </div>
+
+        <div style="display: flex; flex-direction: column; gap: 0.5rem;">
+          <button class="btn-ghost" id="download-template-btn" style="width: 100%;">
+            Download template
+          </button>
+
+          <div class="form-group">
+            <label style="font-size: 11px; font-weight: 700; color: var(--mute);">Upload rules.md</label>
+            <input type="file" id="rules-file-input" accept=".md" style="font-size: 11px; font-family: var(--font-mono); color: var(--body);">
+          </div>
+
+          <button class="btn-ghost" id="upload-rules-btn" style="width: 100%;">
+            Upload Rules File
+          </button>
+        </div>
+
+        <!-- Admin Configuration (Hidden by default) -->
+        <div id="admin-config-panel" style="display: none;">
+          <div style="border-top: 1px solid var(--hairline); margin: 0.5rem 0;"></div>
+          <div class="form-group">
+            <span class="empty-eyebrow">Admin Settings</span>
+          </div>
+          <form id="repo-config-form" style="display: flex; flex-direction: column; gap: 1rem;">
+            <div class="form-group">
+              <label for="new-repo-name">Repo Name</label>
+              <input type="text" id="new-repo-name" required placeholder="e.g. app-repo" style="padding: 8px 12px; border-radius: var(--radius-sm); border: 1px solid var(--hairline); background: var(--canvas); color: var(--ink); font-family: var(--font-mono); font-size: 13px; outline: none;">
+            </div>
+            <div class="form-group">
+              <label for="new-repo-url">VCS URL or Local Path</label>
+              <input type="text" id="new-repo-url" required placeholder="e.g. /app" style="padding: 8px 12px; border-radius: var(--radius-sm); border: 1px solid var(--hairline); background: var(--canvas); color: var(--ink); font-family: var(--font-mono); font-size: 13px; outline: none;">
+            </div>
+            <div class="form-group">
+              <label for="new-repo-domain">Custom Domain (Optional)</label>
+              <input type="text" id="new-repo-domain" placeholder="e.g. https://api.github.com" style="padding: 8px 12px; border-radius: var(--radius-sm); border: 1px solid var(--hairline); background: var(--canvas); color: var(--ink); font-family: var(--font-mono); font-size: 13px; outline: none;">
+            </div>
+            <button type="submit" class="btn-primary" id="add-repo-btn" style="width: 100%;">Add Repository</button>
+          </form>
+        </div>
+
+      </div>
+    </aside>
+
+    <!-- Center Main Pane: Conversation Thread -->
+    <main>
+      <section class="report-pane" id="report-view">
+        
+        <!-- Empty State -->
+        <div class="report-placeholder" id="placeholder-view">
+          <span class="empty-eyebrow">Feasibility Sandbox</span>
+          <h2>No analysis active.</h2>
+          <p>
+            Configure parameters in the sidebar, or select a previous run from your history list to view.
+          </p>
+          <div class="hint-grid">
+            <span class="hint-chip">Architecture check</span>
+            <span class="hint-chip">Security guardrails</span>
+            <span class="hint-chip">Code ownership</span>
+          </div>
+        </div>
+
+        <!-- Chat Conversation Messages Container -->
+        <div id="chat-messages-container" class="chat-messages-container" style="display: none;">
+          <!-- Alternating user bubbles and assistant report bubbles populated dynamically -->
+        </div>
+
+      </section>
+    </main>
+
+  </div>
+
+  <!-- Live overlay logger when streaming runs in the corner -->
+  <div id="live-stream-logger" class="live-stream-logger" style="display: none;">
+    <div class="live-stream-header">
+      <span>Agent Process Log</span>
+      <span id="console-status">Idle</span>
+    </div>
+    <div id="console-lines" class="live-stream-lines"></div>
+  </div>
+
+  <script src="/static/app.js"></script>
+  <script src="/static/lattice-bg.js"></script>
+</body>
+</html>
