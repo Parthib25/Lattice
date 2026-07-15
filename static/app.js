@@ -35,6 +35,65 @@ document.addEventListener('DOMContentLoaded', () => {
     mdParser = window.markdownit({ html: true });
   }
 
+  // ─── Three.js Lattice Icon ──────────────────────────────────────────────────
+  function initLatticeIcon() {
+    const container = document.getElementById('lattice-icon-container');
+    if (!container || typeof THREE === 'undefined') return;
+
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(50, 1, 0.1, 100);
+    camera.position.z = 4.5;
+
+    const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
+    renderer.setSize(24, 24);
+    renderer.setPixelRatio(window.devicePixelRatio);
+    container.appendChild(renderer.domElement);
+
+    const group = new THREE.Group();
+    scene.add(group);
+    
+    // Create a 2x2x2 lattice of cubes
+    const size = 0.5;
+    const spacing = 1.0;
+    
+    for(let x=0; x<2; x++) {
+      for(let y=0; y<2; y++) {
+        for(let z=0; z<2; z++) {
+          const geometry = new THREE.BoxGeometry(size, size, size);
+          const edges = new THREE.EdgesGeometry(geometry);
+          const line = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color: 0x333333 }));
+          
+          line.position.set(
+            (x - 0.5) * spacing,
+            (y - 0.5) * spacing,
+            (z - 0.5) * spacing
+          );
+          group.add(line);
+        }
+      }
+    }
+
+    // Connectors between the centers
+    const lineMat = new THREE.LineBasicMaterial({ color: 0x999999, transparent: true, opacity: 0.5 });
+    const points = [];
+    points.push(new THREE.Vector3(-0.5*spacing, 0, 0), new THREE.Vector3(0.5*spacing, 0, 0));
+    points.push(new THREE.Vector3(0, -0.5*spacing, 0), new THREE.Vector3(0, 0.5*spacing, 0));
+    points.push(new THREE.Vector3(0, 0, -0.5*spacing), new THREE.Vector3(0, 0, 0.5*spacing));
+    const connGeo = new THREE.BufferGeometry().setFromPoints(points);
+    const connectors = new THREE.LineSegments(connGeo, lineMat);
+    group.add(connectors);
+
+    function animate() {
+      requestAnimationFrame(animate);
+      group.rotation.x += 0.01;
+      group.rotation.y += 0.015;
+      renderer.render(scene, camera);
+    }
+    animate();
+  }
+  initLatticeIcon();
+
+
   // LLM Provider -> Model mapping
   const providerModels = {
     openai: [
